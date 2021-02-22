@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title>МСК зона 2 координаты</title>
+        <meta name="robots" content="noindex">
+        <meta name="googlebot" content="noindex">
+        <link rel="stylesheet" href="/static/leaflet.css" />
+        <script src="/static/leaflet.js"></script>
+        <script src="/static/leaflet-providers.js"></script>
+        <script src="/static/proj4.js"></script>
+        <script src="/static/Leaflet.Control.Custom.js"></script>
+    </head>
+    <body>
+        <div id="map"></div>
+        <script>
+            var map = L.map('map', {
+                crs: L.CRS.EPSG3857,
+                maxZoom: 20,
+                zoomControl: false
+            })
+            map.on("load",function() { setTimeout(() => {
+                map.invalidateSize();
+             }, 1); });
+            var OSM = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                maxNativeZoom: 19,
+                maxZoom: 21
+            }).addTo(map);
+            var Esri_WorldTopoMap = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ, TomTom, Intermap, iPC, USGS, FAO, NPS, NRCAN, GeoBase, Kadaster NL, Ordnance Survey, Esri Japan, METI, Esri China (Hong Kong), and the GIS User Community',
+                maxNativeZoom: 19,
+                maxZoom: 21
+            }).addTo(map);
+            var Esri_WorldImagery = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+                maxNativeZoom: 19,
+                maxZoom: 21
+            }).addTo(map);
+
+            var basemaps = {
+                "OpenStreetMap": OSM,
+                "ESRI Топокарта": Esri_WorldTopoMap,
+                "ESRI Аэро и спутник": Esri_WorldImagery
+            }
+
+            var gridStyle = {
+                "color": "#ff7800",
+                "weight": 1,
+                "opacity": 0.8,
+                "fillOpacity": 0
+            };
+
+            fetch('/static/geojson/grid.geojson')
+            .then(response => response.json())
+            .then(result => {
+                const grid = L.geoJSON(result, {
+                    style: gridStyle,
+                    onEachFeature: (feature, layer) => {
+                        layer.bindTooltip(feature.properties.Number)
+                        }
+                    }).addTo(map);
+                const overlays = {
+                    "Какие-то квадраты": grid
+                }
+                initialPicker.addOverlay(grid, "Квадратики");
+            })
+            
+            var initialPicker = L.control.layers(basemaps).addTo(map);
+
+            proj4.defs(
+                'MSK18_2',
+                '+proj=tmerc +lat_0=0 +lon_0=53.55 +k=1 +x_0=2250000 +y_0=-5914743.504 +ellps=krass +towgs84=23.57,-140.95,-79.8,0,0.35,0.79,-0.22 +units=m +no_defs'
+            )
+
+            function makePopup(elatlng) {
+                var converted = proj4(
+                    'EPSG:4326', 
+                    'MSK18_2', 
+                    [elatlng.lng, elatlng.lat]
+                );
+                const view = {
+                    wgs84: {
+                        first: isLatLon ? elatlng.lat.toFixed(8) : elatlng.lng.toFixed(8),
+                        second: isLatLon ? elatlng.lng.toFixed(8) : elatlng.lat.toFixed(8),
+                    },
+                    msk18: {
+                        first: isLatLon ? converted[1] : converted[0],
+                        second: isLatLon ? converted[0] : converted[1],
+                    }
+                }
+                L.popup()
+                .setLatLng(elatlng)
+                .setContent("<b>WGS 84 (EPSG 4326):</b> " + 
+                    view.wgs84.first + ", " + view.wgs84.second +
+                    "<hr><b>МСК-18 зона 2:</b> " +
+                    view.msk18.first + ", " + view.msk18.second
+                    )
+                .openOn(map)
+            }
+
+            function makePopupFromMsk(elatlng) {
+                var converted = proj4(
+                    'MSK18_2',
+                    'EPSG:4326',
+                    [elatlng.lng, elatlng.lat]
+                );
+                const view = {
+                    wgs84: {
+                        first: isLatLon ? converted[1].toFixed(8) : converted[0].toFixed(8),
+                        second: isLatLon ? converted[0].toFixed(8) : converted[1].toFixed(8),
+                    },
+                    msk18: {
+                        first: isLatLon ? elatlng.lat : elatlng.lng,
+                        second: isLatLon ? elatlng.lng : elatlng.lat,
+                    }
+                }
+                L.popup()
+                .setLatLng(L.latLng(converted[1], converted[0]))
+                .setContent("<b>WGS 84 (EPSG 4326):</b> " + 
+                    view.wgs84.first + ", " + view.wgs84.second +
+                    "<hr><b>МСК-18 зона 2:</b> " +
+                    view.msk18.first + ", " + view.msk18.second
+                    )
+                .openOn(map)
+            }
+
+            map.setView([56.9, 53.2], 11);
+            map.on("click", function (event) {
+                const elatlng = event.latlng;
+                makePopup(elatlng)
+            });
+
+            var isLatLon = true;
+
+            L.control.custom({
+                position: 'topright',
+                content: '<p><input type="radio" name="xyoryx" id="latlon" checked' +
+                    ' value="latlon"><label for="latlon">Широта/Долгота (Y/X)</label>' +
+                    '</p><p><input type="radio" name="xyoryx" id="lonlat" v' +
+                    'alue="lonlat"><label for="lonlat">Долгота/Широта (X/Y)</label></p>',
+                classes: 'settings-panel',
+                style:
+                {
+                    margin: '10px',
+                    padding: '0px 0 0 0',
+                    cursor: 'pointer',
+                },
+                events:
+                {
+                    click: function(data)
+                    {
+                        const current = document.querySelector('input[name="xyoryx"]:checked').value;
+                        if (current === "latlon") {
+                            isLatLon = true
+                        }
+                        if (current === "lonlat") {
+                            isLatLon = false
+                        }
+                    }
+                }
+            })
+            .addTo(map);
+
+            L.control.custom({
+                position: 'topleft',
+                content: '<b><label for="fromcrds">Из координат:</label></b><br>' +
+                    '<input type="text" id="fromcrds"><br>' +
+                    '<button id="fromcrds_go">Го</button>',
+                classes: 'settings-panel',
+                style:
+                {
+                    margin: '10px',
+                    padding: '0px 0 0 0',
+                    cursor: 'pointer',
+                    width: '20vw',
+                    "min-width": '50px'
+                }
+            })
+            .addTo(map);
+
+            document.querySelector("#fromcrds_go").addEventListener("click", (e) => {
+                try {
+                    const input = document.querySelector('#fromcrds').value.split(',');
+                    var r = [];
+                    for (const i of input) {
+                        r.push(parseFloat(i))
+                    }
+                    if (r.length != 2) {
+                        alert('Берем только по одной точке за раз');
+                        return
+                    }
+                    elatlng = {
+                        lat: isLatLon ? r[0] : r[1],
+                        lng: isLatLon ? r[1] : r[0]
+                    }
+                    if (r[0] < 200) {
+                        makePopup(elatlng)
+                    } else {
+                        makePopupFromMsk(elatlng)
+                    }
+                } catch (err) {
+                    alert(err)
+                }
+
+            })
+        </script>
+
+        <style>
+body, #map {
+    margin: 0;
+    padding: 0;
+    height: 100vh;
+    width: 100vw;
+}
+
+.leaflet-container {
+    cursor: crosshair !important;
+}
+
+.leaflet-interactive {
+    cursor: crosshair !important;
+}
+
+.settings-panel {
+    background-color: white;
+    width: 15vw;
+    min-width: 40px;
+    z-index: 99999;
+}
+
+#fromcrds {
+    width: 100%;
+    padding: 0;
+    border: 1px #4890e6 solid;
+    height: 30px;
+}
+        </style>
+    </body>
+</html>
