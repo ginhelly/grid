@@ -1,0 +1,6 @@
+__pycache__
+env/
+templates/
+pl.*
+requirements.txt
+*.py
