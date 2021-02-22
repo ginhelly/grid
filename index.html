@@ -51,7 +51,7 @@
                 "fillOpacity": 0
             };
 
-            fetch('/static/geojson/grid.geojson')
+            fetch('/grid/static/geojson/grid.geojson')
             .then(response => response.json())
             .then(result => {
                 const grid = L.geoJSON(result, {
